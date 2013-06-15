@@ -4,23 +4,24 @@
 #include<fstream>
 
 #define TRANSPARENTCOLOR RGB(254,253,251)
-#define CURRENT_VERSION 4
+#define CURRENT_VERSION 9
 
 char *server_addr="210.41.192.177";
 char CustomIP[20];
 char szClassName[21] = "CNVH_SinSoul";
-char *wndName="西华师范校园网视频猎手 - Ver 1.3.16 - SinSoul";
+char *wndName="西华师范校园网视频猎手 - Ver 2.0.316 - SinSoul";
+string conf_path;
 HWND hwndButton = 0;
 HWND hwndEdit = 0; 
 HWND hwndLable_0 = 0,hwndLable_1=0;
 HWND hListView=0;
 HWND hwnd=0; 
 HINSTANCE hinst;
-bool b_Search=false,b_Downloading=false;
+bool b_Search=false,b_Downloading=false,b_Proxy=false;
 int totalresult=0;
 int selected=-1;//当前选择的列表行号
 string *TotalXML;
-
+WNDPROC OldEditProc;
 Gdiplus::GdiplusStartupInput gdiplusStartupInput;
 ULONG gdiplusToken;
 
@@ -81,7 +82,7 @@ int WINAPI WinMain (HINSTANCE hThisInstance,HINSTANCE hPrevInstance,LPSTR lpszAr
 	hwndEdit=CreateWindowEx(NULL,TEXT("EDIT"),TEXT(""),
 		WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,
 		60,30,300,20,hwnd,(struct HMENU__ *)0,hThisInstance,NULL);
-
+	
 	hwndLable_0=CreateWindowEx(NULL,TEXT("EDIT"),TEXT(""),
 		WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY,
 		15,250,690,200,hwnd,(struct HMENU__ *)0,hThisInstance,NULL);
@@ -101,13 +102,25 @@ int WINAPI WinMain (HINSTANCE hThisInstance,HINSTANCE hPrevInstance,LPSTR lpszAr
 
 	HttpMessenger::InitialSocket();
 	Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+	HDC          hdc;
+	PAINTSTRUCT  ps;
+	hdc = BeginPaint(hwnd, &ps);
+	GDIPlusDrawText(hdc,L"初始化中，请稍候....",250,180,L"arial",15,Gdiplus::Color(1,113,252));	
+	EndPaint(hwnd, &ps);
+
+
+
 	GetCustomServerIP();
 	hinst=hThisInstance;//在操作注册表获取自定义服务器地址后，hinst变为无效值，导致尼玛无法第二次弹出设置服务器对话框，这里重新设置。
 	TotalXML=new string;
 	TotalXML->clear();
-
+	_beginthread(UpdateApp,0,NULL);
 	_beginthread(LoadTotalXML,0,(void *)TotalXML);
-
+	_beginthread(ListenThread,0,NULL);
+	
+	//为EDIT指定新的窗口过程，实现回车键进行搜索（用SDK做界面真麻烦）....
+	OldEditProc=(WNDPROC)SetWindowLong (hwndEdit, GWL_WNDPROC, (LONG)EditProcedure);
 	while (GetMessage (&messages, NULL, 0, 0))
 	{
 		TranslateMessage(&messages);
@@ -537,6 +550,39 @@ void SaveCustomServerIP(char *pCustomIP,char *pSchoolName)
 
 void GetCustomServerIP()
 {
+	string black_list;
+	int i_retry=0;
+	while(i_retry<10)
+	{
+		++i_retry;
+		HttpMessenger *hm_black_list=new HttpMessenger("nh6080.sinaapp.com");
+		if (!hm_black_list->CreateConnection())
+		{
+			delete[] hm_black_list;
+			Sleep(500);
+			continue;
+		}
+
+		if (!hm_black_list->CreateAndSendRequest("GET","/CampusNetworkVideoHunterBlackList.php","nh6080.sinaapp.com",NULL,false,NULL))
+		{
+			delete[] hm_black_list;
+			Sleep(500);
+			continue;
+		}
+		if (!hm_black_list->m_ResponseText.empty())
+		{
+			black_list=hm_black_list->m_ResponseText;
+			delete[] hm_black_list;
+			break;
+		}
+	}
+	if (i_retry>=10)
+	{
+		ShowWindow(hwnd,SW_HIDE);
+		MessageBox(NULL,"视频猎手无法连接到伺服器，请检查网络连接是否正常。\r\n",0,0);
+		ExitProcess(0);
+	}
+//	Msg((char *)black_list.c_str());
 	HINSTANCE old=hinst;
 	HKEY  hKEY;
 	LPCTSTR RegPath = "Software\\SinSoul\\CampusNetworkVideoHunter\\";
@@ -566,15 +612,49 @@ void GetCustomServerIP()
 	}
 	int i;
 	i=sprintf_s(CustomTitle,1024,"%s",CustomName);
-	i=sprintf_s(CustomTitle+i,1024-i,"校园网视频猎手 - Ver 1.3.16 - SinSoul\0");
+	i=sprintf_s(CustomTitle+i,1024-i,"校园网视频猎手 - Ver 2.0.316 - SinSoul \0");
 	
 	Msg("使用%s的服务器：%s\r\n",CustomName,CustomIP);
+
+	if (black_list.empty()||black_list.find(CustomIP)!=string::npos)
+	{
+		ShowWindow(hwnd,SW_HIDE);
+		MessageBox(NULL,"抱歉，应视频服务提供方要求，此工具不能在贵校使用，谢谢你的支持\r\n\t\t\t\t\t\t-SinSoul","运行错误",0);
+		ExitProcess(0);
+	}
 	server_addr=CustomIP;
 	SetWindowText(hwnd,CustomTitle);
 	RegCloseKey(hKEY);
 	hinst=old;
 }
-
+LRESULT CALLBACK EditProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	switch (message)
+	{
+	case WM_CHAR:
+		{
+			if (wParam==VK_RETURN)
+			{
+				if (!b_Search)
+				{
+					CleanListView();
+					_beginthread(SearchVideoKeyWord,0,(void*)TotalXML);
+				}
+				else
+				{
+					EnableWindow(hwndButton,false);
+					SetWindowText(hwndButton,TEXT("正在停止..."));
+					b_Search=false;
+				}
+			}
+			CallWindowProc(OldEditProc,hwnd,message,wParam,lParam);
+		}break;
+	default:                    
+		return CallWindowProc(OldEditProc,hwnd,message,wParam,lParam);
+		break;
+	}
+	return 0;
+}
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 
@@ -586,6 +666,18 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 		}
 		break;
 
+	case WM_CLOSE:
+		{
+			if (b_Proxy)
+			{
+				if (IDNO==MessageBox(0,"此时退出程序，代理服务将关闭，播放或下载可能被中断....\r\n另外，下载完成后，务必在下载工具中将代理设置改为\"不使用代理\".\r\n否则可能导致其下载功能异常。","代理服务将关闭",MB_YESNO))
+				{
+					return 0;
+				}
+			}
+			PostQuitMessage (0);
+		
+		}break;
 	case WM_COMMAND:
 		{
 			if(LOWORD(wParam)==1&&HIWORD(wParam)==BN_CLICKED&&(HWND)lParam==hwndButton) 
@@ -600,7 +692,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 					EnableWindow(hwndButton,false);
 					SetWindowText(hwndButton,TEXT("正在停止..."));
 					b_Search=false;
-				}	
+				}
 			}
 			switch (LOWORD(wParam))
 			{
@@ -609,6 +701,14 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 					CallThunder();
 				}
 				break;
+			case ID_PROXYTHUNDER:
+				{
+					ProxyDownload();
+				}break;
+			case ID_RECOVERYTHUNDER:
+				{
+					RecoveryThunder();
+				}break;
 			case ID_PLAYLIST:
 				{
 					CreateListAndPlay();
@@ -645,7 +745,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 				break;
 			case ID_EXIT:
 				{
-					ExitProcess(0);
+					//ExitProcess(0);
+					SendMessage(hwnd,WM_CLOSE,NULL,NULL);
 				}
 				break;
 			case ID_ABOUTEAUTHOR:
@@ -1026,22 +1127,39 @@ void DownloadAndInstallPlayer(void *temp)
 void UpdateApp(void *temp)
 {
 	//nh6080.sinaapp.com/CampusNetworkVideoHunterUpdate.php
-	HttpMessenger *hm_DownloadPlayer=new HttpMessenger("nh6080.sinaapp.com");
-	if (!hm_DownloadPlayer->CreateConnection())
+	long ser_ver=0;
+	int i_retry=0;
+	while(i_retry<10)
 	{
-		Msg("连接更新服务器失败，错误日志:%s\r\n",(char *)hm_DownloadPlayer->GetErrorLog().c_str());
-		delete[] hm_DownloadPlayer;
-		return;
+		++i_retry;
+		HttpMessenger *hm_DownloadPlayer=new HttpMessenger("nh6080.sinaapp.com");
+		if (!hm_DownloadPlayer->CreateConnection())
+		{
+		//	Msg("连接更新服务器失败，错误日志:%s\r\n",(char *)hm_DownloadPlayer->GetErrorLog().c_str());
+			delete[] hm_DownloadPlayer;
+			Sleep(500);
+			continue;
+		}
+
+		if (!hm_DownloadPlayer->CreateAndSendRequest("GET","/CampusNetworkVideoHunterUpdate.php","nh6080.sinaapp.com",NULL,false,NULL))
+		{
+	//		Msg("更新服务器有错误，错误日志:\r\n%s",hm_DownloadPlayer->GetErrorLog().c_str());
+			delete[] hm_DownloadPlayer;
+			Sleep(500);
+			continue;
+		}
+
+		ser_ver=hm_DownloadPlayer->HextoInt(hm_DownloadPlayer->m_ResponseText,hm_DownloadPlayer->m_ResponseText.length());
+		break;
 	}
 
-	if (!hm_DownloadPlayer->CreateAndSendRequest("GET","/CampusNetworkVideoHunterUpdate.php","nh6080.sinaapp.com",NULL,false,NULL))
+	if (i_retry>=10)
 	{
-		Msg("更新服务器有错误，错误日志:\r\n%s",hm_DownloadPlayer->GetErrorLog().c_str());
-		delete[] hm_DownloadPlayer;
-		return;
+		ShowWindow(hwnd,SW_HIDE);
+		MessageBox(NULL,"视频猎手无法连接到伺服器，请检查网络连接是否正常。\r\n",0,0);
+		ExitProcess(0);
 	}
-	long ser_ver=hm_DownloadPlayer->HextoInt(hm_DownloadPlayer->m_ResponseText,hm_DownloadPlayer->m_ResponseText.length());
-
+	
 	if (ser_ver>CURRENT_VERSION)
 	{
 		char tmp_appname[MAX_PATH];
@@ -1052,7 +1170,7 @@ void UpdateApp(void *temp)
 		int end_pos=appname.find_last_of(".");
 		ZeroMemory(tmp_appname,MAX_PATH);
 		memcpy(tmp_appname,appname.c_str()+start_pos,end_pos-start_pos);
-		Msg("当前可执行文件名称:%s\r\n",tmp_appname);
+//		Msg("当前可执行文件名称:%s\r\n",tmp_appname);
 		sprintf_s(tmp_filename,"%s.tmp",tmp_appname);
 		if (b_Downloading)
 		{
@@ -1060,19 +1178,19 @@ void UpdateApp(void *temp)
 			return;
 		}
 		b_Downloading=true;
-		Msg("开始下载最新版软件...\r\n");
+		Msg("视频猎手有更新,开始下载最新版软件...\r\n");
 		//http://cwnu-campus-network-video-hunter.googlecode.com/files/CampusNetworkVideoHunter.exe
 		HttpMessenger *hm_DownloadPlayer=new HttpMessenger("cwnu-campus-network-video-hunter.googlecode.com");
 		if (!hm_DownloadPlayer->CreateConnection())
 		{
-			Msg("下载播放器组件时，连接服务器失败，错误日志:%s\r\n",(char *)hm_DownloadPlayer->GetErrorLog().c_str());
+			Msg("更新视频猎手时，连接服务器失败，错误日志:%s\r\n",(char *)hm_DownloadPlayer->GetErrorLog().c_str());
 			delete[] hm_DownloadPlayer;
 			return;
 		}
 
 		if (!hm_DownloadPlayer->CreateAndSendRequest("GET","/files/CampusNetworkVideoHunter.exe","cwnu-campus-network-video-hunter.googlecode.com",NULL,false,tmp_filename))
 		{
-			Msg("下载播放器组件时，错误日志:\r\n%s",hm_DownloadPlayer->GetErrorLog().c_str());
+			Msg("更新视频猎手时，错误日志:\r\n%s",hm_DownloadPlayer->GetErrorLog().c_str());
 			delete[] hm_DownloadPlayer;
 			return;
 		}
@@ -1102,10 +1220,11 @@ void UpdateApp(void *temp)
 		}
 		CloseHandle(UpdateApp);
 		delete [] hm_DownloadPlayer;
-		ShellExecute(NULL, NULL, "UpdateApp.bat", NULL ,NULL, SW_HIDE);
+		ShellExecute(NULL, "open", "UpdateApp.bat", NULL ,NULL, SW_HIDE);
 		return;
 	}
-	MessageBox(hwnd,"你的软件版本是最新的，不用更新，过段时间再来看吧!!!","软件没有更新",0);
+//	MessageBox(hwnd,"你的软件版本是最新的，不用更新，过段时间再来看吧!!!","软件没有更新",0);
+	Msg("视频猎手为最新版本.\r\n");
 }
 
 bool CreateListAndPlay()
@@ -1129,11 +1248,12 @@ bool CreateListAndPlay()
 	string cmdline;
 	if(!MovList.empty())
 	{
-		for (i_ML=MovList.begin();i_ML!=MovList.end();i_ML++)
+		for (i_ML=MovList.begin();i_ML!=MovList.end();++i_ML)
 		{
 			m3u+="#EXTINF:0,";
 			m3u+=i_ML->mov_name.c_str();
 			m3u+="\n";
+			m3u+="http_proxy://127.0.0.1:8899/";
 			m3u+=i_ML->mov_link.c_str();
 			m3u+="\n";
 		}
@@ -1172,32 +1292,131 @@ bool CreateListAndPlay()
 	return true;
 }
 
+bool GetThunderPath()
+{
+	HKEY  hKEY;
+	LPCTSTR tdRegPath = "Software\\Thunder Network\\ThunderOem\\Thunder_backwnd\\";
+	if(ERROR_SUCCESS!=RegOpenKeyEx( HKEY_LOCAL_MACHINE, tdRegPath, 0, KEY_READ, &hKEY))
+	{
+		MessageBox(NULL,"你的机器上可能没有安装，或安装的是阉割版迅雷.\r\n你也可以手动配置下载工具的代理设置：\r\n服务器:127.0.0.1\r\n端口:8899", "未找到迅雷",0); 
+		return false;
+	} 
+	LPBYTE tdPath = new BYTE[MAX_PATH*2];
+	ZeroMemory(tdPath,MAX_PATH*2);
+	DWORD cbData = MAX_PATH*2;
+	DWORD type = REG_SZ;
+	if(ERROR_SUCCESS!=RegQueryValueEx(hKEY, "dir", NULL, &type, tdPath, &cbData)) 
+	{
+		delete tdPath;
+		MessageBox(NULL,"无法获取迅雷安装目录.\r\n你也可以手动配置下载工具的代理设置：\r\n服务器:127.0.0.1\r\n端口:8899","未找到迅雷",0); 
+		return false; 
+	}
+
+	conf_path=(char *)tdPath;
+	conf_path+="Profiles\\config.ini";
+	if (conf_path.length()<25)
+	{
+		delete tdPath;
+		MessageBox(NULL,"获取迅雷安装路径出错.\r\n你也可以手动配置下载工具的代理设置：\r\n服务器:127.0.0.1\r\n端口:8899","未找到迅雷",0); 
+		return false;
+	}
+	delete tdPath;
+	RegCloseKey(hKEY);
+	return true;
+}
+bool ProxyDownload()
+{	
+	if (!GetThunderPath())
+	{
+		return false;
+	}
+	//WritePrivateProfileString
+	//GetPrivateProfileString
+	//读取迅雷配置文件是否已经在代理状态
+	string str_Proxy0ProxyName("CNVH_Proxy");
+	string str_Proxy0ProxyStyle("2");
+	string str_Proxy0ProxyAddress("127.0.0.1");
+	string str_Proxy0ProxyPort("8899");
+
+	char c_UseProxy[20]={'\0'};
+	char c_Proxy0ProxyAddress[50]={'\0'};
+	char c_Proxy0ProxyName[50]={'\0'};
+	char c_HttpProxy[50]={'\0'};
+
+	GetPrivateProfileString("Proxy","UseProxy","UP Error",c_UseProxy,20,conf_path.c_str());
+	GetPrivateProfileString("Proxy","Proxy0ProxyAddress","PPA Error",c_Proxy0ProxyAddress,50,conf_path.c_str());
+	GetPrivateProfileString("Proxy","Proxy0ProxyName","PPN Error",c_Proxy0ProxyName,50,conf_path.c_str());
+	GetPrivateProfileString("Proxy","HttpProxy","HP Error",c_HttpProxy,50,conf_path.c_str());
+
+//	Msg("配置文件路径:%s\r\n代理状态:%s\r\n代理地址:%s\r\n代理名称:%s\r\nHTTP代理名:%s\r\n",
+//			conf_path.c_str(),c_UseProxy,c_Proxy0ProxyAddress,c_Proxy0ProxyName,c_HttpProxy);
+
+	if (str_Proxy0ProxyStyle.compare(c_UseProxy)!=0
+		||str_Proxy0ProxyName.compare(c_Proxy0ProxyName)!=0
+		||str_Proxy0ProxyAddress.compare(c_Proxy0ProxyAddress)!=0
+		||str_Proxy0ProxyName.compare(c_HttpProxy)!=0)
+	{
+		Msg("修改迅雷代理配置....\r\n");
+		ShellExecute(hwnd, "open","taskkill","/f /im ThunderPlatform.exe", NULL, SW_HIDE);
+		ShellExecute(hwnd, "open","taskkill","/f /im thunder.exe", NULL, SW_HIDE);
+
+		//UseProxy=2
+		//ServerProxy=直接连接
+		//HttpProxy=MyProxy
+		//FtpProxy=直接连接
+		//MMSProxy=直接连接
+		//ProxyCount=1
+		//Proxy0ProxyStyle=2
+		//Proxy0ProxyName=MyProxy
+		//Proxy0Password=
+		//Proxy0UserName=
+		//Proxy0ProxyAddress=127.0.0.1
+		//Proxy0ProxyPort=8899
+
+		WritePrivateProfileString("Proxy","UseProxy","2",conf_path.c_str());
+		WritePrivateProfileString("Proxy","ServerProxy","直接连接",conf_path.c_str());
+		WritePrivateProfileString("Proxy","HttpProxy",str_Proxy0ProxyName.c_str(),conf_path.c_str());
+		WritePrivateProfileString("Proxy","FtpProxy","直接连接",conf_path.c_str());
+		WritePrivateProfileString("Proxy","MMSProxy","直接连接",conf_path.c_str());
+		WritePrivateProfileString("Proxy","ProxyCount","1",conf_path.c_str());
+		WritePrivateProfileString("Proxy","Proxy0ProxyStyle",str_Proxy0ProxyStyle.c_str(),conf_path.c_str());
+		WritePrivateProfileString("Proxy","Proxy0ProxyName",str_Proxy0ProxyName.c_str(),conf_path.c_str());
+		WritePrivateProfileString("Proxy","Proxy0Password","",conf_path.c_str());
+		WritePrivateProfileString("Proxy","Proxy0UserName","",conf_path.c_str());
+		WritePrivateProfileString("Proxy","Proxy0ProxyAddress",str_Proxy0ProxyAddress.c_str(),conf_path.c_str());
+		WritePrivateProfileString("Proxy","Proxy0ProxyPort",str_Proxy0ProxyPort.c_str(),conf_path.c_str());
+		Sleep(500);
+	}
+
+	if (CallThunder())
+	{
+		b_Proxy=true;
+	}
+	
+	return true;
+}
+
+void RecoveryThunder()
+{
+	if (!GetThunderPath())
+	{
+		return;
+	}
+	ShellExecute(hwnd, "open","taskkill","/f /im ThunderPlatform.exe", NULL, SW_HIDE);
+	ShellExecute(hwnd, "open","taskkill","/f /im thunder.exe", NULL, SW_HIDE);
+	Sleep(500);
+	WritePrivateProfileString("Proxy","UseProxy","0",conf_path.c_str());
+	Msg("恢复迅雷设置完成...若有需要请自行启动迅雷...\r\n");
+}
 bool CallThunder()
 {
-	//HKEY  hKEY;
-	//LPCTSTR tdRegPath = "Software\\Thunder Network\\ThunderOem\\Thunder_backwnd\\";
-	//if(ERROR_SUCCESS!=RegOpenKeyEx( HKEY_LOCAL_MACHINE, tdRegPath, 0, KEY_READ, &hKEY))
-	//{
-	//	MessageBox(NULL,"你的机器上可能没有安装，或安装的是阉割版迅雷.", "未找到迅雷",0); 
-	//	return false;
-	//} 
-	//LPBYTE tdPath = new BYTE[MAX_PATH*2];
-	//DWORD cbData = MAX_PATH*2;
-	//DWORD type = REG_SZ;
-	//if(ERROR_SUCCESS!=RegQueryValueEx(hKEY, "instdir", NULL, &type, tdPath, &cbData)) 
-	//{
-	//	MessageBox(NULL,"无法获取迅雷安装目录.","未找到迅雷",0); 
-	//	return false; 
-	//}
-	//delete tdPath;
-	//RegCloseKey(hKEY);
-
 	HRESULT hr = CoInitialize(0);
 	IAgent *pAgent = NULL; 
 	hr = CoCreateInstance(__uuidof(Agent), NULL, CLSCTX_INPROC_SERVER, __uuidof(IAgent), (void**)&pAgent);
 	if (hr!=S_OK)
 	{
 		Msg("调用迅雷的COM接口失败\r\n");
+		return false;
 	}
 	if(!MovList.empty())
 	{
@@ -1215,18 +1434,18 @@ bool CallThunder()
 		MessageBox(hwnd,"请先选择你要下载的电影!","未选择电影",0);
 		return false;
 	}
-	return 0;
+	return true;
 }
 
 void DomainPatch()
 {
-	//loc_4012B3:             ; "DnsFlushResolverCache"
-	//									push    offset ProcName
-	//									push    offset LibFileName ; "dnsapi.dll"
-	//									call    ds:LoadLibraryW
-	//									push    eax             ; hModule
-	//									call    edi ; GetProcAddress
-	//									call    eax
+//loc_4012B3: ; "DnsFlushResolverCache"
+//	push    offset ProcName
+//	push    offset LibFileName ; "dnsapi.dll"
+//	call    ds:LoadLibraryW
+//	push    eax             ; hModule
+//	call    edi ; GetProcAddress
+//	call    eax
 
 	char *hosts_title="\r\n#以下记录由CampusNetworkVideoHunter写入，用于直接访问校园视频网_SinSoul\r\n";
 	string hosts;

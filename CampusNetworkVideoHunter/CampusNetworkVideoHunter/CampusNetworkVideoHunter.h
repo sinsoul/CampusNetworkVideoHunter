@@ -15,6 +15,8 @@ using namespace std;
 extern char *server_addr;
 extern char szClassName[21 ];
 extern char *wndName;
+extern string conf_path;
+extern bool b_Proxy;
 extern HWND hwndButton;
 extern HWND hwndEdit; 
 extern HWND hwndLable_0,hwndLable_1;
@@ -25,6 +27,7 @@ extern HWND hListView;
 extern HINSTANCE hinst;
 
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK EditProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 bool OnChildWindowsNotify(PVOID pParam);
 LRESULT CALLBACK SetServerAddr(HWND hDlg,UINT message,WPARAM wParam,LPARAM lParam);
 LRESULT CALLBACK AboutApplication(HWND hDlg,UINT message,WPARAM wParam,LPARAM lParam);
@@ -41,6 +44,8 @@ void Msg(TCHAR *szFormat, ...);
 void ProgressMsg(TCHAR *szFormat, ...);
 void CleanMsg();
 
+
+
 HWND CreateListView (HWND hwndParent, LPSTR szWindowName);
 bool AddListViewItems(HWND hwndListView,DWORD index,char *videoname,char *videodirector,char *videoactor,char *videochannel,char *videoid);
 bool InitListViewColumns(HWND hWndListView);
@@ -48,6 +53,8 @@ int GetIndex(HWND hList);
 void CleanListView();
 
 bool CallThunder();
+bool ProxyDownload();
+void RecoveryThunder();
 bool CreateListAndPlay();
 void DomainPatch();
 void UpdateApp(void *temp);

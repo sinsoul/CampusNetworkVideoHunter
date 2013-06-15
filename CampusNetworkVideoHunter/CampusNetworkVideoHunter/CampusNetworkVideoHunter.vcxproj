@@ -43,6 +43,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(VCInstallDir)include;G:\WinDDK_Win7\7600.16385.1\inc\crt;G:\WinDDK_Win7\7600.16385.1\inc\api;G:\WinDDK_Win7\7600.16385.1\inc\ddk;G:\WinDDK_Win7\7600.16385.1\inc;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -51,6 +52,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -78,11 +80,13 @@
   <ItemGroup>
     <ClCompile Include="CampusNetworkVideoHunter.cpp" />
     <ClCompile Include="HttpMessenger.cpp" />
+    <ClCompile Include="ProxyServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CampusNetworkVideoHunter.h" />
     <ClInclude Include="HttpMessenger.h" />
     <ClInclude Include="MyStd.h" />
+    <ClInclude Include="ProxyServer.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Transcoding.h" />
   </ItemGroup>

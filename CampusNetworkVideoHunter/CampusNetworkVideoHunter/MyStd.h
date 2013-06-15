@@ -11,6 +11,8 @@
 #include "resource.h"
 //#include "Transcoding.h"
 #include "HttpMessenger.h"
+#include "ProxyServer.h"
 #include "CampusNetworkVideoHunter.h"
+
 
 
