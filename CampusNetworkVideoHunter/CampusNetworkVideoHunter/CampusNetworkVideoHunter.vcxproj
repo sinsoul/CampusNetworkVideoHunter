@@ -94,6 +94,7 @@
     <ResourceCompile Include="Menu.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="decypt.png" />
     <None Include="icon\view-preview_48.ico" />
     <None Include="关于软件.png" />
     <None Include="设置服务器.png" />

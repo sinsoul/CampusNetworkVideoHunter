@@ -60,5 +60,8 @@
     <None Include="设置服务器.png">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="decypt.png">
+      <Filter>资源文件</Filter>
+    </None>
   </ItemGroup>
 </Project>

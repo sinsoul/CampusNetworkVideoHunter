@@ -7,7 +7,7 @@
 #include <GdiPlusEnums.h>
 #pragma comment(lib,"gdiplus") 
 
-#import "G:\\Independent\\Thunder 7\\BHO\\ThunderAgent.dll" 
+#import "C:\\Program Files (x86)\\Thunder7\BHO\\ThunderAgent.dll" 
 using namespace ThunderAgentLib;
 
 using namespace std;
@@ -28,6 +28,7 @@ extern HINSTANCE hinst;
 
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EditProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK DecryptWndProc(HWND hDlg,UINT message,WPARAM wParam,LPARAM lParam);
 bool OnChildWindowsNotify(PVOID pParam);
 LRESULT CALLBACK SetServerAddr(HWND hDlg,UINT message,WPARAM wParam,LPARAM lParam);
 LRESULT CALLBACK AboutApplication(HWND hDlg,UINT message,WPARAM wParam,LPARAM lParam);
@@ -63,6 +64,8 @@ bool EnableAero(HWND hwnd_aero);
 bool ImageFromIDResource(UINT nID, LPCTSTR sTR,IStream* &pstm);
 void GDIPlusDrawImage(HDC hdc,UINT SourceID,LPCTSTR SourceDIR,Gdiplus::REAL leftx,Gdiplus::REAL lefty,Gdiplus::REAL rightx,Gdiplus::REAL righty);
 void GDIPlusDrawText(HDC hdc,PWCHAR string,Gdiplus::REAL x_point,Gdiplus::REAL y_point,PWCHAR userFont,Gdiplus::REAL fontSize,Gdiplus::Color pColor);
+
+int hunter_decoder(char *file_name);
 
 #pragma comment(lib,"Comctl32.lib")
 //#pragma comment(lib,"Strsafe.lib")

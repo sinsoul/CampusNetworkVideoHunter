@@ -4,12 +4,12 @@
 #include<fstream>
 
 #define TRANSPARENTCOLOR RGB(254,253,251)
-#define CURRENT_VERSION 9
-
+#define CURRENT_VERSION 10
+#define VERSION_STRING	"Ver 2.1.1214"
 char *server_addr="210.41.192.177";
 char CustomIP[20];
 char szClassName[21] = "CNVH_SinSoul";
-char *wndName="西华师范校园网视频猎手 - Ver 2.0.316 - SinSoul";
+char *wndName="西华师范校园网视频猎手 - "VERSION_STRING"  - SinSoul";
 string conf_path;
 HWND hwndButton = 0;
 HWND hwndEdit = 0; 
@@ -612,7 +612,7 @@ void GetCustomServerIP()
 	}
 	int i;
 	i=sprintf_s(CustomTitle,1024,"%s",CustomName);
-	i=sprintf_s(CustomTitle+i,1024-i,"校园网视频猎手 - Ver 2.0.316 - SinSoul \0");
+	i=sprintf_s(CustomTitle+i,1024-i,"校园网视频猎手 - "VERSION_STRING" - SinSoul \0");
 	
 	Msg("使用%s的服务器：%s\r\n",CustomName,CustomIP);
 
@@ -646,8 +646,12 @@ LRESULT CALLBACK EditProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 					SetWindowText(hwndButton,TEXT("正在停止..."));
 					b_Search=false;
 				}
+				return true;
 			}
-			CallWindowProc(OldEditProc,hwnd,message,wParam,lParam);
+			else
+			{
+				CallWindowProc(OldEditProc,hwnd,message,wParam,lParam);
+			}
 		}break;
 	default:                    
 		return CallWindowProc(OldEditProc,hwnd,message,wParam,lParam);
@@ -665,7 +669,6 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			PostQuitMessage (0);
 		}
 		break;
-
 	case WM_CLOSE:
 		{
 			if (b_Proxy)
@@ -701,6 +704,10 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 					CallThunder();
 				}
 				break;
+			case ID_BTN_DECRYPT:
+				{
+					DialogBox(hinst, (LPCTSTR)IDD_DECRYPT, hwnd, (DLGPROC)DecryptWndProc);
+				}break;
 			case ID_PROXYTHUNDER:
 				{
 					ProxyDownload();
@@ -824,6 +831,66 @@ bool OnChildWindowsNotify(PVOID pParam)
 			break;
 		}
 		return true;
+	}
+	return false;
+}
+
+LRESULT CALLBACK DecryptWndProc(HWND hDlg,UINT message,WPARAM wParam,LPARAM lParam)
+{
+	HDC          hdc;
+	PAINTSTRUCT  ps;
+	switch (message)
+	{
+	case WM_CTLCOLORDLG:
+		{
+			if (EnableAero(hDlg))
+			{
+				LOGBRUSH Lb;
+				Lb.lbStyle = BS_SOLID;
+				Lb.lbColor = TRANSPARENTCOLOR;
+				return (LRESULT)CreateBrushIndirect(&Lb);
+			}
+		}break;
+	case WM_PAINT:
+		{
+			hdc = BeginPaint(hDlg, &ps);
+			WPARAM w=wParam;
+			LPARAM l=lParam;
+			GDIPlusDrawImage(hdc,IDB_PNG_DECRYPT,"PNG",0,0,450,140);	
+			EndPaint(hDlg, &ps);
+			return true;
+		}break;
+	case WM_DROPFILES:
+		{
+			int total_file=0;
+			int success_count=0,failed_count=0;
+			char tips_msg[1024]={0};
+			total_file=DragQueryFile((HDROP)wParam,-1,NULL,0);
+			for (int i=0;i<total_file;i++)
+			{
+				TCHAR file_name[MAX_PATH]={0};
+				DragQueryFile((HDROP)wParam,i,file_name,MAX_PATH);
+				if (hunter_decoder(file_name))
+				{
+					success_count++;
+				}
+				else
+				{
+					failed_count++;
+				}
+				
+			}
+			sprintf_s(tips_msg,"共尝试解密%d个文件，成功%d个，失败%d个。",total_file,success_count,failed_count);
+			MessageBox(hDlg,tips_msg,"视频解密提示",MB_OK);
+			DragFinish((HDROP)wParam);
+		}break;
+	case WM_COMMAND:
+		if(LOWORD(wParam) == IDCANCEL)
+		{
+			EndDialog(hDlg, LOWORD(wParam));
+		}
+		return true;
+		break;
 	}
 	return false;
 }
@@ -1180,7 +1247,8 @@ void UpdateApp(void *temp)
 		b_Downloading=true;
 		Msg("视频猎手有更新,开始下载最新版软件...\r\n");
 		//http://cwnu-campus-network-video-hunter.googlecode.com/files/CampusNetworkVideoHunter.exe
-		HttpMessenger *hm_DownloadPlayer=new HttpMessenger("cwnu-campus-network-video-hunter.googlecode.com");
+		//http://nh6080.sinaapp.com/CampusNetworkVideoHunter.exe
+		HttpMessenger *hm_DownloadPlayer=new HttpMessenger("nh6080.sinaapp.com");
 		if (!hm_DownloadPlayer->CreateConnection())
 		{
 			Msg("更新视频猎手时，连接服务器失败，错误日志:%s\r\n",(char *)hm_DownloadPlayer->GetErrorLog().c_str());
@@ -1188,7 +1256,7 @@ void UpdateApp(void *temp)
 			return;
 		}
 
-		if (!hm_DownloadPlayer->CreateAndSendRequest("GET","/files/CampusNetworkVideoHunter.exe","cwnu-campus-network-video-hunter.googlecode.com",NULL,false,tmp_filename))
+		if (!hm_DownloadPlayer->CreateAndSendRequest("GET","/CampusNetworkVideoHunter.exe","nh6080.sinaapp.com",NULL,false,tmp_filename))
 		{
 			Msg("更新视频猎手时，错误日志:\r\n%s",hm_DownloadPlayer->GetErrorLog().c_str());
 			delete[] hm_DownloadPlayer;
@@ -1655,3 +1723,73 @@ VOID CleanListView()
 	totalresult=0;
 }
 
+#define FILE_MAP_START 0x0
+
+int hunter_decoder(char *file_name)
+{
+	HANDLE hMapFile,hFile;
+	DWORD dwFileSize,dwFileMapSize,dwMapViewSize,dwFileMapStart,dwSysGran;
+	SYSTEM_INFO SysInfo;
+	BYTE *lpMapBuffer;
+	char error_msg[1024]={0};
+
+	WIN32_FIND_DATA fd;
+	HANDLE hFind = FindFirstFile(file_name,&fd);
+	FindClose(hFind);
+	if (fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)
+	{
+		sprintf_s(error_msg,"%s是个文件夹，请不要尝试哄骗本猎手！！！",file_name);
+		MessageBox(hwnd,error_msg,"视频猎手错误",MB_OK);
+		return 0;
+	}
+
+	hFile = CreateFile(file_name,GENERIC_READ | GENERIC_WRITE,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
+	{
+		sprintf_s(error_msg,"不能打开文件: %s\n该文件可能正在被其它程序使用。",file_name);
+		MessageBox(hwnd,error_msg,"视频猎手错误",MB_OK);
+		return 0;
+	}
+	dwFileSize = GetFileSize(hFile,NULL);
+//	printf("File :%s\nFile Size:0x%.8x\n",file_name,dwFileSize);
+	if (dwFileSize<0xa0)
+	{
+		sprintf_s(error_msg,"%s也太小了吧，根本不可能是视频，请不要尝试哄骗本猎手！！！",file_name);
+		MessageBox(hwnd,error_msg,"视频猎手错误",MB_OK);
+		return 0;
+	}
+	GetSystemInfo(&SysInfo);
+	dwSysGran = SysInfo.dwAllocationGranularity;
+	dwFileMapStart = (FILE_MAP_START / dwSysGran) * dwSysGran;
+	dwMapViewSize = (FILE_MAP_START % dwSysGran) + dwFileSize;
+	dwFileMapSize = FILE_MAP_START + dwFileSize;
+
+	hMapFile = CreateFileMapping( hFile,NULL,PAGE_READWRITE,0,dwFileMapSize,NULL);
+	if (hMapFile == NULL) 
+	{
+		sprintf_s(error_msg,"创建内在映射文件出错，错误代码: CreateFileMapping %d\n", GetLastError());
+		MessageBox(hwnd,error_msg,"视频猎手错误",MB_OK);
+		return 0;
+	}
+
+	lpMapBuffer = (BYTE *)MapViewOfFile(hMapFile,FILE_MAP_ALL_ACCESS,0,dwFileMapStart,dwMapViewSize);
+	if (lpMapBuffer == NULL) 
+	{
+		sprintf_s(error_msg,"创建内在映射文件出错，错误代码: MapViewOfFile %d\n", GetLastError());
+		MessageBox(hwnd,error_msg,"视频猎手错误",MB_OK);
+		return 0;
+	}
+
+//	printf ("Map View Start:0x%.8x\nMap View Size :0x%.8x\n",dwFileMapStart,dwMapViewSize);
+
+	int i=0; 
+	while(i<0xa0)
+	{
+		*(lpMapBuffer+i++)^=0xff;
+	}
+	CloseHandle(hFile);
+	CloseHandle(hMapFile);
+	UnmapViewOfFile(lpMapBuffer);
+//	printf("Decryption is complete.\n\n");
+	return 1;
+}
